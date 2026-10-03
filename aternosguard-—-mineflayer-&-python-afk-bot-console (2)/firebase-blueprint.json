@@ -1,0 +1,166 @@
+{
+  "entities": {
+    "BotProfile": {
+      "title": "BotProfile",
+      "description": "Persistent configuration, anchor coordinates, and cumulative uptime telemetry for a 24/7 Aternos AFK bot profile.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the operator who owns this bot profile.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "host": {
+          "type": "string",
+          "description": "Minecraft server hostname (e.g. FrankMetal.aternos.me).",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "port": {
+          "type": "number",
+          "description": "Minecraft server port (e.g. 46958)."
+        },
+        "username": {
+          "type": "string",
+          "description": "Bot in-game username.",
+          "minLength": 3,
+          "maxLength": 32
+        },
+        "movementMode": {
+          "type": "string",
+          "description": "Anti-fall and continuous movement strategy.",
+          "enum": ["continuous_roam", "anchor_step_return", "in_place_jump_look", "bounded_radius"]
+        },
+        "autoWalk": {
+          "type": "boolean",
+          "description": "Whether step-and-return walking is enabled."
+        },
+        "autoJump": {
+          "type": "boolean",
+          "description": "Whether anti-AFK jump pulses are enabled."
+        },
+        "walkIntervalSec": {
+          "type": "number",
+          "description": "Interval between anti-AFK movement cycles in seconds."
+        },
+        "walkRadiusBlocks": {
+          "type": "number",
+          "description": "Maximum allowed drift radius from anchor before snapping back."
+        },
+        "cumulativeUptimeSeconds": {
+          "type": "number",
+          "description": "Total persistent uptime recorded across sessions."
+        },
+        "totalKeepalivesAcked": {
+          "type": "number",
+          "description": "Cumulative serverbound keep_alive packets acknowledged."
+        },
+        "lastPosition": {
+          "type": "string",
+          "description": "Formatted X, Y, Z coordinates of the bot.",
+          "maxLength": 80
+        },
+        "connectionState": {
+          "type": "string",
+          "description": "Current connection state.",
+          "enum": ["Connected", "Connecting", "Reconnecting", "Disconnected"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last heartbeat sync."
+        }
+      },
+      "required": [
+        "ownerId",
+        "host",
+        "port",
+        "username",
+        "movementMode",
+        "autoWalk",
+        "autoJump",
+        "walkIntervalSec",
+        "walkRadiusBlocks",
+        "cumulativeUptimeSeconds",
+        "totalKeepalivesAcked",
+        "lastPosition",
+        "connectionState",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "KeepaliveCheckpoint": {
+      "title": "KeepaliveCheckpoint",
+      "description": "Persistent keepalive and anti-disconnect telemetry checkpoint stored under a BotProfile.",
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the operator.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "profileId": {
+          "type": "string",
+          "description": "Parent BotProfile document ID.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "category": {
+          "type": "string",
+          "description": "Event category.",
+          "enum": ["Keepalive", "Movement", "Network", "Reconnect", "Server", "Chat"]
+        },
+        "message": {
+          "type": "string",
+          "description": "Checkpoint summary message.",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "details": {
+          "type": "string",
+          "description": "Coordinates, packet ID, and anti-fall state details.",
+          "minLength": 1,
+          "maxLength": 320
+        },
+        "uptimeSeconds": {
+          "type": "number",
+          "description": "Bot uptime in seconds at checkpoint."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when checkpoint was logged."
+        }
+      },
+      "required": [
+        "ownerId",
+        "profileId",
+        "category",
+        "message",
+        "details",
+        "uptimeSeconds",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/botProfiles/{profileId}": {
+      "schema": { "$ref": "#/entities/BotProfile" },
+      "description": "Stores persistent 24/7 bot configurations, safe spawn anchors, and cumulative uptime telemetry."
+    },
+    "/botProfiles/{profileId}/checkpoints/{checkpointId}": {
+      "schema": { "$ref": "#/entities/KeepaliveCheckpoint" },
+      "description": "Subcollection of persistent keepalive heartbeats and movement checkpoints for a BotProfile."
+    }
+  }
+}

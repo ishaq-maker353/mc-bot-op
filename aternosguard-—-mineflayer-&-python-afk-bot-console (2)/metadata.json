@@ -1,0 +1,6 @@
+{
+  "name": "AternosGuard — Mineflayer & Python AFK Bot Console",
+  "description": "24/7 Minecraft AFK bot controller, keepalive log monitor, anti-AFK movement scheduler, and Python/Mineflayer script generator for FrankMetal.aternos.me:46958.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,182 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default-Deny Catch-All)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    // 3. Entity Validation Blueprints (Anti-Update-Gap)
+    function isValidBotProfile(data) {
+      return data.keys().hasAll([
+        'ownerId',
+        'host',
+        'port',
+        'username',
+        'movementMode',
+        'autoWalk',
+        'autoJump',
+        'walkIntervalSec',
+        'walkRadiusBlocks',
+        'cumulativeUptimeSeconds',
+        'totalKeepalivesAcked',
+        'lastPosition',
+        'connectionState',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'host',
+        'port',
+        'username',
+        'movementMode',
+        'autoWalk',
+        'autoJump',
+        'walkIntervalSec',
+        'walkRadiusBlocks',
+        'cumulativeUptimeSeconds',
+        'totalKeepalivesAcked',
+        'lastPosition',
+        'connectionState',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.host is string && data.host.size() >= 3 && data.host.size() <= 120 &&
+      data.port is number && data.port >= 1 && data.port <= 65535 &&
+      data.username is string && data.username.size() >= 3 && data.username.size() <= 32 &&
+      data.movementMode is string && data.movementMode in ['continuous_roam', 'anchor_step_return', 'in_place_jump_look', 'bounded_radius'] &&
+      data.autoWalk is bool &&
+      data.autoJump is bool &&
+      data.walkIntervalSec is number && data.walkIntervalSec >= 2 && data.walkIntervalSec <= 120 &&
+      data.walkRadiusBlocks is number && data.walkRadiusBlocks >= 0 && data.walkRadiusBlocks <= 25 &&
+      data.cumulativeUptimeSeconds is number && data.cumulativeUptimeSeconds >= 0 &&
+      data.totalKeepalivesAcked is number && data.totalKeepalivesAcked >= 0 &&
+      data.lastPosition is string && data.lastPosition.size() >= 1 && data.lastPosition.size() <= 80 &&
+      data.connectionState is string && data.connectionState in ['Connected', 'Connecting', 'Reconnecting', 'Disconnected'] &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidKeepaliveCheckpoint(data, profileId) {
+      return data.keys().hasAll([
+        'ownerId',
+        'profileId',
+        'category',
+        'message',
+        'details',
+        'uptimeSeconds',
+        'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'ownerId',
+        'profileId',
+        'category',
+        'message',
+        'details',
+        'uptimeSeconds',
+        'createdAt'
+      ]) &&
+      data.ownerId is string && data.ownerId.size() >= 1 && data.ownerId.size() <= 128 &&
+      data.ownerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.ownerId == request.auth.uid &&
+      data.profileId is string && data.profileId.size() >= 1 && data.profileId.size() <= 128 &&
+      data.profileId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.profileId == profileId &&
+      data.category is string && data.category in ['Keepalive', 'Movement', 'Network', 'Reconnect', 'Server', 'Chat'] &&
+      data.message is string && data.message.size() >= 1 && data.message.size() <= 240 &&
+      data.details is string && data.details.size() >= 1 && data.details.size() <= 320 &&
+      data.uptimeSeconds is number && data.uptimeSeconds >= 0 &&
+      data.createdAt is timestamp;
+    }
+
+    // 4. Collection: /botProfiles/{profileId}
+    match /botProfiles/{profileId} {
+      allow get: if isSignedIn() &&
+        isValidId(profileId) &&
+        (resource == null || existing().ownerId == request.auth.uid);
+
+      allow list: if isSignedIn() && existing().ownerId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+        isValidId(profileId) &&
+        isValidBotProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isSignedIn() &&
+        isValidId(profileId) &&
+        isValidBotProfile(incoming()) &&
+        existing().ownerId == request.auth.uid &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'host',
+          'port',
+          'username',
+          'movementMode',
+          'autoWalk',
+          'autoJump',
+          'walkIntervalSec',
+          'walkRadiusBlocks',
+          'cumulativeUptimeSeconds',
+          'totalKeepalivesAcked',
+          'lastPosition',
+          'connectionState',
+          'updatedAt'
+        ]);
+
+      allow delete: if isSignedIn() && isValidId(profileId) && existing().ownerId == request.auth.uid;
+
+      // 5. Subcollection: /botProfiles/{profileId}/checkpoints/{checkpointId}
+      match /checkpoints/{checkpointId} {
+        allow get: if isSignedIn() &&
+          isValidId(profileId) &&
+          isValidId(checkpointId) &&
+          (resource == null || existing().ownerId == request.auth.uid) &&
+          get(/databases/$(database)/documents/botProfiles/$(profileId)).data.ownerId == request.auth.uid;
+
+        allow list: if isSignedIn() &&
+          existing().ownerId == request.auth.uid;
+
+        allow create: if isSignedIn() &&
+          isValidId(profileId) &&
+          isValidId(checkpointId) &&
+          isValidKeepaliveCheckpoint(incoming(), profileId) &&
+          incoming().createdAt == request.time &&
+          exists(/databases/$(database)/documents/botProfiles/$(profileId)) &&
+          get(/databases/$(database)/documents/botProfiles/$(profileId)).data.ownerId == request.auth.uid;
+
+        allow update: if false;
+
+        allow delete: if isSignedIn() &&
+          isValidId(profileId) &&
+          isValidId(checkpointId) &&
+          existing().ownerId == request.auth.uid &&
+          get(/databases/$(database)/documents/botProfiles/$(profileId)).data.ownerId == request.auth.uid;
+      }
+    }
+  }
+}
